@@ -1,5 +1,8 @@
+use balancer::listen;
 use serde::Deserialize;
 use toml;
+
+mod balancer;
 
 #[derive(Deserialize, Debug, PartialEq)]
 struct Config {
@@ -32,6 +35,7 @@ fn main() {
 
     let config: Config = toml::from_str(toml_str).unwrap();
     println!("{:#?}", config);
+    listen(config);
 }
 
 #[test]
