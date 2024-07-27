@@ -1,16 +1,23 @@
 use crate::{log_level, Config};
 use axum::{http::Request, routing::any, Router};
-use std::sync::Arc;
+use reqwest::Client;
+use std::sync::{Arc, Mutex};
 use tracing::info;
 use tracing_subscriber::FmtSubscriber;
 
 pub struct Balancer {
     config: Config,
+    next_server: Mutex<usize>,
+    http_client: Client,
 }
 
 impl Balancer {
     pub fn new(config: Config) -> Self {
-        Self { config }
+        Self {
+            config,
+            next_server: Mutex::new(0),
+            http_client: Client::new(),
+        }
     }
 
     pub fn is_logging_enabled(&self) -> bool {
@@ -50,6 +57,11 @@ impl Balancer {
             let body_bytes = axum::body::to_bytes(req.into_body(), 0).await.unwrap();
             info!("Request body: {:?}", String::from_utf8_lossy(&body_bytes));
         }
+
+        let mut next_server = self.next_server.lock().unwrap();
+        let server = &self.config.servers[*next_server];
+        *next_server = (*next_server + 1) % self.config.servers.len();
+        info!("Forwarding request to {}", server.name);
 
         "Hello, World!"
     }

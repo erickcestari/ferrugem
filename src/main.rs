@@ -2,7 +2,6 @@ use balancer::Balancer;
 use config::Config;
 use toml;
 
-mod algorithm;
 mod balancer;
 mod config;
 mod log_level;
@@ -22,6 +21,10 @@ async fn main() {
         [[servers]]
         name = "api2"
         address = "http://localhost:3001"
+
+        [[servers]]
+        name = "api3"
+        address = "http://localhost:3002"
     "#;
 
     match toml::from_str::<Config>(toml_str) {
