@@ -22,7 +22,7 @@ impl FromStr for LogLevel {
             "error" => Ok(LogLevel::Error),
             "info" => Ok(LogLevel::Info),
             "trace" => Ok(LogLevel::Trace),
-            _ => Err("Invalid log level"),
+            _ => Ok(LogLevel::None),
         }
     }
 }

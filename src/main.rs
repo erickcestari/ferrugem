@@ -2,6 +2,7 @@ use balancer::Balancer;
 use config::Config;
 use toml;
 
+mod algorithm;
 mod balancer;
 mod config;
 mod log_level;
@@ -10,8 +11,8 @@ mod log_level;
 async fn main() {
     let toml_str = r#"
         version = 1
-        port = 3333
-        log_level = 'trace'
+        port = 9999
+        log_level = 'none'
         algorithm = 'round-robin'
 
         [[servers]]
