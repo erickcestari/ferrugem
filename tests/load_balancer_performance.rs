@@ -26,7 +26,6 @@ async fn test_load_balancer_performance() {
                 name: "api2".to_string(),
             },
         ],
-        version: 1,
     };
 
     let balancer = Balancer::new(config);

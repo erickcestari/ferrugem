@@ -4,7 +4,6 @@ use crate::log_level::LogLevel;
 
 #[derive(Deserialize, Debug, PartialEq)]
 pub struct Config {
-    pub version: u32,
     pub port: u16,
     pub log_level: LogLevel,
     pub algorithm: String,
