@@ -2,6 +2,10 @@
 name = "ferrugem"
 version = "0.1.0"
 edition = "2021"
+authors = ["Erick Cestari <erickcestari03@gmail.com>"]
+description = "A lightweight and efficient load balancer implemented in Rust."
+license = "MIT"
+repository = "https://github.com/erickcestari/ferrugem"
 
 [dependencies]
 axum = "0.7.5"
