@@ -1,4 +1,4 @@
-# Rust Load Balancer
+# Ferrugem Load Balancer
 
 A lightweight and efficient load balancer implemented in Rust.
 
@@ -60,10 +60,10 @@ name = "api2"
 url = "https://jsonplaceholder.typicode.com"
 ```
 
-# Contributing
+### Contributing
 
 Contributions are welcome! Feel free to open issues or submit pull requests to improve the project.
 
-# License
+### License
 
 This project is licensed under the MIT License.
