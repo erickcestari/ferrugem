@@ -1,5 +1,11 @@
 use crate::{log_level, Config};
-use axum::{http::Request, routing::any, Router};
+use axum::{
+    body::Body,
+    http::{HeaderMap, HeaderName, Request},
+    response::Response,
+    routing::any,
+    Router,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
@@ -51,13 +57,7 @@ impl Balancer {
         axum::serve(listener, app).await.unwrap();
     }
 
-    async fn root(&self, req: Request<axum::body::Body>) -> String {
-        // if self.is_logging_enabled() {
-        //     info!("Request headers: {:?}", req.headers());
-        //     let body_bytes = axum::body::to_bytes(req.into_body(), 0).await.unwrap();
-        //     info!("Request body: {:?}", String::from_utf8_lossy(&body_bytes));
-        // }
-
+    async fn root(&self, req: Request<axum::body::Body>) -> Response<Body> {
         let mut next_server = self.next_server.lock().await;
         let server = &self.config.servers[*next_server];
         *next_server = (*next_server + 1) % self.config.servers.len();
@@ -66,21 +66,55 @@ impl Balancer {
         let request = self
             .http_client
             .request(req.method().clone(), server.url.clone())
+            .headers(convert_headers(req.headers()))
             .build()
             .unwrap();
+
         let result = self.http_client.execute(request).await;
-        let mut status = "500".to_string();
 
         match result {
             Ok(response) => {
-                status = response.status().to_string();
-                info!("Received response with status: {}", status);
+                info!("Received response with status: {}", response.status());
+                let status = response.status();
+                let headers = convert_headers_back(response.headers());
+                let body = response.bytes().await.unwrap();
+
+                axum::http::Response::builder()
+                    .status(status)
+                    .body(Body::from(body))
+                    .unwrap()
             }
             Err(e) => {
                 info!("Failed to send request: {:?}", e);
+                let status = e
+                    .status()
+                    .map(|status| status.as_u16())
+                    .unwrap_or_else(|| 500);
+
+                axum::http::Response::builder()
+                    .status(status)
+                    .body(Body::empty())
+                    .unwrap()
             }
         }
-
-        status
     }
+}
+
+fn convert_headers(headers: &HeaderMap) -> reqwest::header::HeaderMap {
+    let mut reqwest_headers = reqwest::header::HeaderMap::new();
+    for (key, value) in headers.iter() {
+        reqwest_headers.insert(key, value.clone());
+    }
+    reqwest_headers
+}
+
+fn convert_headers_back(headers: &reqwest::header::HeaderMap) -> HeaderMap {
+    let mut axum_headers = HeaderMap::new();
+    for (key, value) in headers.iter() {
+        axum_headers.insert(
+            HeaderName::from_bytes(key.as_str().as_bytes()).unwrap(),
+            value.clone(),
+        );
+    }
+    axum_headers
 }
