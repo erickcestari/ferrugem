@@ -1,7 +1,8 @@
 use crate::{log_level, Config};
 use axum::{http::Request, routing::any, Router};
 use reqwest::Client;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::info;
 use tracing_subscriber::FmtSubscriber;
 
@@ -51,17 +52,24 @@ impl Balancer {
         axum::serve(listener, app).await.unwrap();
     }
 
-    async fn root(self: Arc<Self>, req: Request<axum::body::Body>) -> &'static str {
-        if self.is_logging_enabled() {
-            info!("Request headers: {:?}", req.headers());
-            let body_bytes = axum::body::to_bytes(req.into_body(), 0).await.unwrap();
-            info!("Request body: {:?}", String::from_utf8_lossy(&body_bytes));
-        }
+    async fn root(&self, req: Request<axum::body::Body>) -> &'static str {
+        // if self.is_logging_enabled() {
+        //     info!("Request headers: {:?}", req.headers());
+        //     let body_bytes = axum::body::to_bytes(req.into_body(), 0).await.unwrap();
+        //     info!("Request body: {:?}", String::from_utf8_lossy(&body_bytes));
+        // }
 
-        let mut next_server = self.next_server.lock().unwrap();
+        let mut next_server = self.next_server.lock().await;
         let server = &self.config.servers[*next_server];
         *next_server = (*next_server + 1) % self.config.servers.len();
         info!("Forwarding request to {}", server.name);
+
+        let request = self
+            .http_client
+            .request(req.method().clone(), server.address.to_string())
+            .build()
+            .unwrap();
+        self.http_client.execute(request).await.unwrap();
 
         "Hello, World!"
     }
