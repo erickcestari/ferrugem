@@ -1,0 +1,12 @@
+version = 1
+port = 9999
+log_level = 'info'
+algorithm = 'round-robin'
+
+[[servers]]
+name = "api1"
+url = "https://jsonplaceholder.typicode.com"
+
+[[servers]]
+name = "api2"
+url = "https://jsonplaceholder.typicode.com"

@@ -18,11 +18,11 @@ async fn test_load_balancer_performance() {
         algorithm: "round-robin".to_string(),
         servers: vec![
             Server {
-                url: "http://localhost:3000".to_string(),
+                url: "https://jsonplaceholder.typicode.com".to_string(),
                 name: "api1".to_string(),
             },
             Server {
-                url: "http://localhost:3001".to_string(),
+                url: "https://jsonplaceholder.typicode.com".to_string(),
                 name: "api2".to_string(),
             },
         ],

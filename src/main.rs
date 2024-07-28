@@ -1,5 +1,6 @@
 use balancer::Balancer;
 use config::Config;
+use std::fs;
 use toml;
 
 mod balancer;
@@ -8,18 +9,17 @@ mod log_level;
 
 #[tokio::main]
 async fn main() {
-    let toml_str = r#"
-        version = 1
-        port = 9999
-        log_level = 'info'
-        algorithm = 'round-robin'
+    let config_path = "ferrugem.toml";
 
-        [[servers]]
-        name = "api1"
-        url = "https://jsonplaceholder.typicode.com"
-    "#;
+    let toml_str = match fs::read_to_string(config_path) {
+        Ok(content) => content,
+        Err(e) => {
+            eprintln!("Failed to read configuration file: {}", e);
+            return;
+        }
+    };
 
-    match toml::from_str::<Config>(toml_str) {
+    match toml::de::from_str::<Config>(&toml_str) {
         Ok(config) => {
             println!("{:#?}", config);
             let balancer = Balancer::new(config);

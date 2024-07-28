@@ -79,12 +79,22 @@ impl Balancer {
             .query()
             .map(|q| format!("?{}", q))
             .unwrap_or_default();
-
-        let new_uri = format!("{}{}{}", server.url, original_path, query);
-        println!("{}", new_uri);
         let method = req.method().clone();
         let headers = req.headers().clone();
+        let new_uri = format!("{}{}{}", server.url, original_path, query);
         let body_bytes = to_bytes(req.into_body(), usize::MAX).await.unwrap();
+        let body_text = String::from_utf8_lossy(&body_bytes);
+
+        if self.is_logging_enabled() {
+            info!(
+                "Incoming request: method={}, path={}, query={}",
+                method, original_path, query
+            );
+            info!("Incoming request headers: {:?}", headers);
+            info!("Incoming request body: {}", body_text);
+            info!("Routing to backend server: {}", server.url);
+            info!("Forwarding request to: {}", new_uri);
+        }
 
         let request = self
             .http_client
@@ -96,8 +106,13 @@ impl Balancer {
 
         match self.http_client.execute(request).await {
             Ok(response) => {
-                info!("Received response with status: {}", response.status());
-                info!("Response headers: {:?}", response.headers());
+                if self.is_logging_enabled() {
+                    info!(
+                        "Received response from backend server with status: {}",
+                        response.status()
+                    );
+                    info!("Response headers: {:?}", response.headers());
+                }
                 let status = response.status();
                 let headers = convert_headers_back(response.headers());
                 let body_stream = response.bytes_stream();
@@ -112,7 +127,9 @@ impl Balancer {
                 response_builder
             }
             Err(e) => {
-                error!("Failed to send request: {:?}", e);
+                if self.is_logging_enabled() {
+                    error!("Failed to send request to backend server: {:?}", e);
+                }
                 let status = e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
                 Response::builder()
