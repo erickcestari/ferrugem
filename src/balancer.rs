@@ -1,6 +1,5 @@
 use crate::{log_level, Config};
 use axum::{http::Request, routing::any, Router};
-use reqwest::Client;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
@@ -9,7 +8,7 @@ use tracing_subscriber::FmtSubscriber;
 pub struct Balancer {
     config: Config,
     next_server: Mutex<usize>,
-    http_client: Client,
+    http_client: reqwest::Client,
 }
 
 impl Balancer {
@@ -17,7 +16,7 @@ impl Balancer {
         Self {
             config,
             next_server: Mutex::new(0),
-            http_client: Client::new(),
+            http_client: reqwest::Client::new(),
         }
     }
 
@@ -52,7 +51,7 @@ impl Balancer {
         axum::serve(listener, app).await.unwrap();
     }
 
-    async fn root(&self, req: Request<axum::body::Body>) -> &'static str {
+    async fn root(&self, req: Request<axum::body::Body>) -> String {
         // if self.is_logging_enabled() {
         //     info!("Request headers: {:?}", req.headers());
         //     let body_bytes = axum::body::to_bytes(req.into_body(), 0).await.unwrap();
@@ -66,11 +65,22 @@ impl Balancer {
 
         let request = self
             .http_client
-            .request(req.method().clone(), server.address.to_string())
+            .request(req.method().clone(), server.url.clone())
             .build()
             .unwrap();
-        self.http_client.execute(request).await.unwrap();
+        let result = self.http_client.execute(request).await;
+        let mut status = "500".to_string();
 
-        "Hello, World!"
+        match result {
+            Ok(response) => {
+                status = response.status().to_string();
+                info!("Received response with status: {}", status);
+            }
+            Err(e) => {
+                info!("Failed to send request: {:?}", e);
+            }
+        }
+
+        status
     }
 }

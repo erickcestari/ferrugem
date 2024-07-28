@@ -16,15 +16,11 @@ async fn main() {
 
         [[servers]]
         name = "api1"
-        address = "http://localhost:3000"
+        address = "https://jsonplaceholder.typicode.com/posts"
 
         [[servers]]
         name = "api2"
         address = "http://localhost:3001"
-
-        [[servers]]
-        name = "api3"
-        address = "http://localhost:3002"
     "#;
 
     match toml::from_str::<Config>(toml_str) {

@@ -14,5 +14,5 @@ pub struct Config {
 #[derive(Deserialize, Debug, PartialEq)]
 pub struct Server {
     pub name: String,
-    pub address: String,
+    pub url: String,
 }
