@@ -42,13 +42,24 @@ impl Balancer {
         let balancer = Arc::new(self);
         let app = {
             let balancer_clone = Arc::clone(&balancer);
-            Router::new().route(
-                "/",
-                any(move |req| {
-                    let balancer_clone = Arc::clone(&balancer_clone);
-                    async move { balancer_clone.root(req).await }
-                }),
-            )
+            Router::new()
+                .route(
+                    "/",
+                    any({
+                        let balancer_clone = Arc::clone(&balancer_clone);
+                        move |req| {
+                            let balancer_clone = Arc::clone(&balancer_clone);
+                            async move { balancer_clone.root(req).await }
+                        }
+                    }),
+                )
+                .route(
+                    "/*path",
+                    any(move |req| {
+                        let balancer_clone = Arc::clone(&balancer_clone);
+                        async move { balancer_clone.root(req).await }
+                    }),
+                )
         };
 
         let listen_addr = format!("0.0.0.0:{}", balancer.config.port);
@@ -62,13 +73,22 @@ impl Balancer {
         let server = &self.config.servers[*next_server];
         *next_server = (*next_server + 1) % self.config.servers.len();
 
+        let original_path = req.uri().path().to_string();
+        let query = req
+            .uri()
+            .query()
+            .map(|q| format!("?{}", q))
+            .unwrap_or_default();
+
+        let new_uri = format!("{}{}{}", server.url, original_path, query);
+        println!("{}", new_uri);
         let method = req.method().clone();
         let headers = req.headers().clone();
         let body_bytes = to_bytes(req.into_body(), usize::MAX).await.unwrap();
 
         let request = self
             .http_client
-            .request(method, server.url.clone())
+            .request(method, new_uri)
             .headers(convert_headers(&headers))
             .body(body_bytes)
             .build()

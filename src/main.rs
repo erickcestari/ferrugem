@@ -16,7 +16,7 @@ async fn main() {
 
         [[servers]]
         name = "api1"
-        url = "https://jsonplaceholder.typicode.com/posts"
+        url = "https://jsonplaceholder.typicode.com"
     "#;
 
     match toml::from_str::<Config>(toml_str) {
