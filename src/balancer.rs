@@ -1,14 +1,14 @@
 use crate::{log_level, Config};
 use axum::{
-    body::Body,
-    http::{HeaderMap, HeaderName, Request},
+    body::{to_bytes, Body},
+    http::{HeaderMap, HeaderName, Request, StatusCode},
     response::Response,
     routing::any,
     Router,
 };
-use std::sync::Arc;
+use std::{sync::Arc, usize};
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::FmtSubscriber;
 
 pub struct Balancer {
@@ -57,41 +57,45 @@ impl Balancer {
         axum::serve(listener, app).await.unwrap();
     }
 
-    async fn root(&self, req: Request<axum::body::Body>) -> Response<Body> {
+    async fn root(&self, req: Request<axum::body::Body>) -> Response {
         let mut next_server = self.next_server.lock().await;
         let server = &self.config.servers[*next_server];
         *next_server = (*next_server + 1) % self.config.servers.len();
-        info!("Forwarding request to {}", server.name);
+
+        let method = req.method().clone();
+        let headers = req.headers().clone();
+        let body_bytes = to_bytes(req.into_body(), usize::MAX).await.unwrap();
 
         let request = self
             .http_client
-            .request(req.method().clone(), server.url.clone())
-            .headers(convert_headers(req.headers()))
+            .request(method, server.url.clone())
+            .headers(convert_headers(&headers))
+            .body(body_bytes)
             .build()
             .unwrap();
 
-        let result = self.http_client.execute(request).await;
-
-        match result {
+        match self.http_client.execute(request).await {
             Ok(response) => {
                 info!("Received response with status: {}", response.status());
+                info!("Response headers: {:?}", response.headers());
                 let status = response.status();
                 let headers = convert_headers_back(response.headers());
-                let body = response.bytes().await.unwrap();
+                let body_stream = response.bytes_stream();
 
-                axum::http::Response::builder()
+                let mut response_builder = axum::response::Response::builder()
                     .status(status)
-                    .body(Body::from(body))
-                    .unwrap()
+                    .body(Body::from_stream(body_stream))
+                    .unwrap();
+
+                *response_builder.headers_mut() = headers;
+
+                response_builder
             }
             Err(e) => {
-                info!("Failed to send request: {:?}", e);
-                let status = e
-                    .status()
-                    .map(|status| status.as_u16())
-                    .unwrap_or_else(|| 500);
+                error!("Failed to send request: {:?}", e);
+                let status = e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
-                axum::http::Response::builder()
+                Response::builder()
                     .status(status)
                     .body(Body::empty())
                     .unwrap()
@@ -105,6 +109,7 @@ fn convert_headers(headers: &HeaderMap) -> reqwest::header::HeaderMap {
     for (key, value) in headers.iter() {
         reqwest_headers.insert(key, value.clone());
     }
+    reqwest_headers.remove("host");
     reqwest_headers
 }
 
@@ -116,5 +121,9 @@ fn convert_headers_back(headers: &reqwest::header::HeaderMap) -> HeaderMap {
             value.clone(),
         );
     }
+    axum_headers.insert(
+        HeaderName::from_bytes("X-Powered-By".as_bytes()).unwrap(),
+        "ferrugem".parse().unwrap(),
+    );
     axum_headers
 }
