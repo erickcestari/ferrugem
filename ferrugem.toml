@@ -1,4 +1,3 @@
-version = 1
 port = 9999
 log_level = 'info'
 algorithm = 'round-robin'
