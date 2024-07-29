@@ -26,7 +26,7 @@ This project is a load balancer built using the Rust programming language and th
 1. Clone the repository:
 
    ```sh
-   git clone https://github.com/yourusername/rust-load-balancer.git
+   git clone https://github.com/erickcestari/ferrugem.git
    cd rust-load-balancer
    ```
 
@@ -46,7 +46,6 @@ This project is a load balancer built using the Rust programming language and th
 The load balancer can be configured using a `ferrugem.toml` struct. Below is an example configuration:
 
 ```toml
-version = 1
 port = 9999
 log_level = 'info'
 algorithm = 'round-robin'
