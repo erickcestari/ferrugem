@@ -83,9 +83,9 @@ impl Balancer {
         let headers = req.headers().clone();
         let new_uri = format!("{}{}{}", server.url, original_path, query);
         let body_bytes = to_bytes(req.into_body(), usize::MAX).await.unwrap();
-        let body_text = String::from_utf8_lossy(&body_bytes);
 
         if self.is_logging_enabled() {
+            let body_text = String::from_utf8_lossy(&body_bytes);
             info!(
                 "Incoming request: method={}, path={}, query={}",
                 method, original_path, query

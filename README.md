@@ -37,7 +37,7 @@ docker run -p 9999:9999 -v $(pwd)/ferrugem.toml:/usr/local/bin/ferrugem.toml eri
 1. Clone the repository:
 
    ```sh
-   git clone https://github.com/yourusername/rust-load-balancer.git
+   git clone https://github.com/erickcestari/ferrugem.git
    cd rust-load-balancer
    ```
 
@@ -57,7 +57,6 @@ docker run -p 9999:9999 -v $(pwd)/ferrugem.toml:/usr/local/bin/ferrugem.toml eri
 The load balancer can be configured using a `ferrugem.toml` struct. Below is an example configuration:
 
 ```toml
-version = 1
 port = 9999
 log_level = 'info'
 algorithm = 'round-robin'
