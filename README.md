@@ -20,6 +20,17 @@ This project is a load balancer built using the Rust programming language and th
 
 - Rust (latest stable version recommended)
 - Cargo (Rust package manager)
+- Git
+
+or
+
+- Docker
+
+### Usage with Docker
+
+```sh
+docker run -p 9999:9999 -v $(pwd)/ferrugem.toml:/usr/local/bin/ferrugem.toml erickcestari/ferrugem
+```
 
 ### Installation
 

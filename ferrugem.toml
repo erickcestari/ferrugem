@@ -4,9 +4,61 @@ log_level = 'info'
 algorithm = 'round-robin'
 
 [[servers]]
-name = "api1"
-url = "https://jsonplaceholder.typicode.com"
+name = "node-backend1"
+url = "http://localhost:3001"
 
 [[servers]]
-name = "api2"
-url = "https://jsonplaceholder.typicode.com"
+name = "node-backend2"
+url = "http://localhost:3002"
+
+[[servers]]
+name = "node-backend3"
+url = "http://localhost:3003"
+
+[[servers]]
+name = "node-backend4"
+url = "http://localhost:3004"
+
+[[servers]]
+name = "node-backend5"
+url = "http://localhost:3005"
+
+[[servers]]
+name = "node-backend6"
+url = "http://localhost:3006"
+
+[[servers]]
+name = "node-backend7"
+url = "http://localhost:3007"
+
+[[servers]]
+name = "node-backend8"
+url = "http://localhost:3008"
+
+[[servers]]
+name = "node-backend9"
+url = "http://localhost:3009"
+
+[[servers]]
+name = "node-backend10"
+url = "http://localhost:3010"
+
+[[servers]]
+name = "node-backend11"
+url = "http://localhost:3011"
+
+[[servers]]
+name = "node-backend12"
+url = "http://localhost:3012"
+
+[[servers]]
+name = "node-backend13"
+url = "http://localhost:3013"
+
+[[servers]]
+name = "node-backend14"
+url = "http://localhost:3014"
+
+[[servers]]
+name = "node-backend15"
+url = "http://localhost:3015"
