@@ -6,14 +6,19 @@ use axum::{
     routing::any,
     Router,
 };
-use std::{sync::Arc, usize};
-use tokio::sync::Mutex;
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    usize,
+};
 use tracing::{error, info};
 use tracing_subscriber::FmtSubscriber;
 
 pub struct Balancer {
     config: Config,
-    next_server: Mutex<usize>,
+    next_server: AtomicUsize,
     http_client: reqwest::Client,
 }
 
@@ -21,7 +26,7 @@ impl Balancer {
     pub fn new(config: Config) -> Self {
         Self {
             config,
-            next_server: Mutex::new(0),
+            next_server: 0.into(),
             http_client: reqwest::Client::new(),
         }
     }
@@ -69,9 +74,9 @@ impl Balancer {
     }
 
     async fn root(&self, req: Request<axum::body::Body>) -> Response {
-        let mut next_server = self.next_server.lock().await;
-        let server = &self.config.servers[*next_server];
-        *next_server = (*next_server + 1) % self.config.servers.len();
+        let next_index =
+            self.next_server.fetch_add(1, Ordering::Relaxed) % self.config.servers.len();
+        let server = &self.config.servers[next_index];
 
         let original_path = req.uri().path().to_string();
         let query = req
@@ -141,23 +146,14 @@ impl Balancer {
     }
 }
 
-fn convert_headers(headers: &HeaderMap) -> reqwest::header::HeaderMap {
-    let mut reqwest_headers = reqwest::header::HeaderMap::new();
-    for (key, value) in headers.iter() {
-        reqwest_headers.insert(key, value.clone());
-    }
+fn convert_headers(headers: &HeaderMap) -> HeaderMap {
+    let mut reqwest_headers = headers.clone();
     reqwest_headers.remove("host");
     reqwest_headers
 }
 
-fn convert_headers_back(headers: &reqwest::header::HeaderMap) -> HeaderMap {
-    let mut axum_headers = HeaderMap::new();
-    for (key, value) in headers.iter() {
-        axum_headers.insert(
-            HeaderName::from_bytes(key.as_str().as_bytes()).unwrap(),
-            value.clone(),
-        );
-    }
+fn convert_headers_back(headers: &HeaderMap) -> HeaderMap {
+    let mut axum_headers = headers.clone();
     axum_headers.insert(
         HeaderName::from_bytes("X-Powered-By".as_bytes()).unwrap(),
         "ferrugem".parse().unwrap(),
