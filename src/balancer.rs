@@ -24,13 +24,7 @@ pub struct Balancer {
 
 impl Balancer {
     pub fn new(config: Config) -> Self {
-        let http_client = reqwest::ClientBuilder::new()
-            .tcp_keepalive(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(2))
-            .pool_idle_timeout(Some(std::time::Duration::from_secs(5)))
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()
-            .unwrap();
+        let http_client = reqwest::ClientBuilder::new().build().unwrap();
 
         Self {
             config,
