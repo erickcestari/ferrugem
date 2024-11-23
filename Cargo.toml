@@ -7,6 +7,10 @@ description = "A lightweight and efficient load balancer implemented in Rust."
 license = "MIT"
 repository = "https://github.com/erickcestari/ferrugem"
 
+[profile.release]
+opt-level = 3
+lto = true
+
 [dependencies]
 axum = "0.7.5"
 serde = { version = "1.0.204", features = ["derive"] }
