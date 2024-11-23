@@ -24,12 +24,10 @@ pub struct Balancer {
 
 impl Balancer {
     pub fn new(config: Config) -> Self {
-        let http_client = reqwest::ClientBuilder::new().build().unwrap();
-
         Self {
             config,
             next_server: 0.into(),
-            http_client,
+            http_client: reqwest::Client::new(),
         }
     }
 
@@ -77,8 +75,7 @@ impl Balancer {
 
     async fn root(&self, req: Request<axum::body::Body>) -> Response {
         let next_index =
-            self.next_server.fetch_add(1, Ordering::AcqRel) % self.config.servers.len();
-
+            self.next_server.fetch_add(1, Ordering::Relaxed) % self.config.servers.len();
         let server = &self.config.servers[next_index];
 
         let original_path = req.uri().path().to_string();
@@ -150,22 +147,13 @@ impl Balancer {
 }
 
 fn convert_headers(headers: &HeaderMap) -> HeaderMap {
-    let mut reqwest_headers = HeaderMap::with_capacity(headers.len());
-    for (key, value) in headers.iter() {
-        reqwest_headers.insert(key, value.clone());
-    }
+    let mut reqwest_headers = headers.clone();
     reqwest_headers.remove("host");
     reqwest_headers
 }
 
 fn convert_headers_back(headers: &HeaderMap) -> HeaderMap {
-    let mut axum_headers = HeaderMap::with_capacity(headers.len() + 1);
-    for (key, value) in headers.iter() {
-        axum_headers.insert(
-            HeaderName::from_bytes(key.as_str().as_bytes()).unwrap(),
-            value.clone(),
-        );
-    }
+    let mut axum_headers = headers.clone();
     axum_headers.insert(
         HeaderName::from_bytes("X-Powered-By".as_bytes()).unwrap(),
         "ferrugem".parse().unwrap(),
