@@ -7,19 +7,24 @@ use axum::{
     Router,
 };
 use std::{
+    io,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    usize,
+};
+use tokio::{io::AsyncReadExt, net::TcpStream};
+use tokio::{
+    io::AsyncWriteExt,
+    net::{lookup_host, TcpListener},
 };
 use tracing::{error, info};
 use tracing_subscriber::FmtSubscriber;
+use url::Url;
 
 pub struct Balancer {
     config: Config,
     next_server: AtomicUsize,
-    http_client: reqwest::Client,
 }
 
 impl Balancer {
@@ -27,7 +32,6 @@ impl Balancer {
         Self {
             config,
             next_server: 0.into(),
-            http_client: reqwest::Client::new(),
         }
     }
 
@@ -68,7 +72,7 @@ impl Balancer {
         };
 
         let listen_addr = format!("0.0.0.0:{}", balancer.config.port);
-        let listener = tokio::net::TcpListener::bind(listen_addr).await.unwrap();
+        let listener = TcpListener::bind(listen_addr).await.unwrap();
 
         axum::serve(listener, app).await.unwrap();
     }
@@ -101,44 +105,84 @@ impl Balancer {
             info!("Forwarding request to: {}", new_uri);
         }
 
-        let request = self
-            .http_client
-            .request(method, new_uri)
-            .headers(convert_headers(&headers))
-            .body(body_bytes)
-            .build()
-            .unwrap();
-
-        match self.http_client.execute(request).await {
-            Ok(response) => {
+        let server_addr = match resolve_url_to_ip(&server.url).await {
+            Ok(addr) => addr,
+            Err(e) => {
                 if self.is_logging_enabled() {
-                    info!(
-                        "Received response from backend server with status: {}",
-                        response.status()
-                    );
-                    info!("Response headers: {:?}", response.headers());
+                    error!("Failed to resolve server URL to IP address: {:?}", e);
                 }
-                let status = response.status();
-                let headers = convert_headers_back(response.headers());
-                let body_stream = response.bytes_stream();
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .unwrap();
+            }
+        };
 
-                let mut response_builder = axum::response::Response::builder()
+        let mut stream = match TcpStream::connect(&server_addr).await {
+            Ok(s) => s,
+            Err(e) => {
+                if self.is_logging_enabled() {
+                    error!("Failed to connect to backend server: {:?}", e);
+                }
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .unwrap();
+            }
+        };
+
+        let request_data = format!(
+            "{} {} HTTP/1.1\r\nHost: {}\r\n{}\r\n\r\n",
+            method,
+            new_uri,
+            server.url,
+            format_headers_for_tcp(&headers)
+        );
+
+        if let Err(e) = stream.write_all(request_data.as_bytes()).await {
+            if self.is_logging_enabled() {
+                error!("Failed to send request to backend server: {:?}", e);
+            }
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+                .unwrap();
+        }
+
+        if let Err(e) = stream.write_all(&body_bytes).await {
+            if self.is_logging_enabled() {
+                error!("Failed to send request body to backend server: {:?}", e);
+            }
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+                .unwrap();
+        }
+
+        let mut response_data = vec![0; 1024];
+        match stream.read(&mut response_data).await {
+            Ok(_) => {
+                let response_str = String::from_utf8_lossy(&response_data);
+                let (status, headers, body) = parse_tcp_response(&response_str);
+
+                if self.is_logging_enabled() {
+                    info!("Received response from backend: status={}", status);
+                }
+
+                let mut response_builder = Response::builder()
                     .status(status)
-                    .body(Body::from_stream(body_stream))
+                    .body(Body::from(body))
                     .unwrap();
 
                 *response_builder.headers_mut() = headers;
-
                 response_builder
             }
             Err(e) => {
                 if self.is_logging_enabled() {
-                    error!("Failed to send request to backend server: {:?}", e);
+                    error!("Failed to receive response from backend server: {:?}", e);
                 }
-                let status = e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-
                 Response::builder()
-                    .status(status)
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(Body::empty())
                     .unwrap()
             }
@@ -146,17 +190,61 @@ impl Balancer {
     }
 }
 
-fn convert_headers(headers: &HeaderMap) -> HeaderMap {
-    let mut reqwest_headers = headers.clone();
-    reqwest_headers.remove("host");
-    reqwest_headers
+fn format_headers_for_tcp(headers: &HeaderMap) -> String {
+    headers
+        .iter()
+        .map(|(key, value)| format!("{}: {}", key, value.to_str().unwrap()))
+        .collect::<Vec<String>>()
+        .join("\r\n")
 }
 
-fn convert_headers_back(headers: &HeaderMap) -> HeaderMap {
-    let mut axum_headers = headers.clone();
-    axum_headers.insert(
-        HeaderName::from_bytes("X-Powered-By".as_bytes()).unwrap(),
-        "ferrugem".parse().unwrap(),
-    );
-    axum_headers
+fn parse_tcp_response(response: &str) -> (StatusCode, HeaderMap, Vec<u8>) {
+    // Split the response into status, headers, and body.
+    // This is a simplified parsing method and might need improvements.
+    let mut parts = response.split("\r\n\r\n");
+    let headers_part = parts.next().unwrap_or("");
+    let body_part = parts.next().unwrap_or("");
+
+    let mut headers = HeaderMap::new();
+    let mut status = StatusCode::INTERNAL_SERVER_ERROR;
+
+    for line in headers_part.lines() {
+        if line.starts_with("HTTP/") {
+            if let Some(status_code) = line.split_whitespace().nth(1) {
+                if let Ok(code) = status_code.parse::<u16>() {
+                    status = StatusCode::from_u16(code).unwrap();
+                }
+            }
+        } else if let Some((key, value)) = line.split_once(": ") {
+            headers.insert(
+                HeaderName::from_bytes(key.as_bytes()).unwrap(),
+                value.parse().unwrap(),
+            );
+        }
+    }
+
+    (status, headers, body_part.as_bytes().to_vec())
+}
+
+async fn resolve_url_to_ip(url: &str) -> Result<String, io::Error> {
+    let parsed_url =
+        Url::parse(url).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid URL"))?;
+
+    let host = parsed_url
+        .host_str()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "No host found"))?
+        .to_string();
+
+    let port = parsed_url.port_or_known_default().unwrap_or(80); // Use 80 for HTTP, 443 for HTTPS
+
+    let socket_addrs = lookup_host((host.to_string(), port)).await?;
+
+    if let Some(addr) = socket_addrs.into_iter().next() {
+        Ok(addr.to_string())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "No IP address found",
+        ))
+    }
 }
